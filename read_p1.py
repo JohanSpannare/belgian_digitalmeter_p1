@@ -46,7 +46,36 @@ obiscodes = {
     "1-0:71.7.0": "L3 current",
     "0-1:24.2.3": "Gas consumption"
     }
-
+    
+obiscodes = {
+    "0-0.1.0.0","Datum och tid",
+    "1-0:1.8.0","Mätarställning Aktiv Energi Uttag",
+    "1-0:2.8.0","Mätarställning Aktiv Energi Inmatning",
+    "1-0:3.8.0","Mätarställning Reaktiv Energi Uttag",
+    "1-0:4.8.0","Mätarställning Reaktiv Energi Inmatning",
+    "1-0:1.7.0","Aktiv Effekt Uttag	Momentan trefaseffekt",
+    "1-0:2.7.0","Aktiv Effekt Inmatning	Momentan trefaseffekt",
+    "1-0:3.7.0","Reaktiv Effekt Uttag	Momentan trefaseffekt",
+    "1-0:4.7.0","Reaktiv Effekt Inmatning	Momentan trefaseffekt",
+    "1-0:21.7.0","L1 Aktiv Effekt Uttag	Momentan effekt",
+    "1-0:22.7.0","L1 Aktiv Effekt Inmatning	Momentan effekt",
+    "1-0:41.7.0","L2 Aktiv Effekt Uttag	Momentan effekt",
+    "1-0:42.7.0","L2 Aktiv Effekt Inmatning	Momentan effekt",
+    "1-0:61.7.0","L3 Aktiv Effekt Uttag	Momentan effekt",
+    "1-0:62.7.0","L3 Aktiv Effekt Inmatning	Momentan effekt",
+    "1-0:23.7.0","L1 Reaktiv Effekt Uttag	Momentan effekt",
+    "1-0:24.7.0","L1 Reaktiv Effekt Inmatning	Momentan effekt",
+    "1-0:43.7.0","L2 Reaktiv Effekt Uttag	Momentan effekt",
+    "1-0:44.7.0","L2 Reaktiv Effekt Inmatning	Momentan effekt",
+    "1-0:63.7.0","L3 Reaktiv Effekt Uttag	Momentan effekt",
+    "1-0:64.7.0","L3 Reaktiv Effekt Inmatning	Momentan effekt",
+    "1-0:32.7.0","L1 Fasspänning	Momentant RMS-värde",
+    "1-0:52.7.0","L2 Fasspänning	Momentant RMS-värde",
+    "1-0:72.7.0","L3 Fasspänning	Momentant RMS-värde",
+    "1-0:31.7.0","L1 Fasström	Momentant RMS-värde",
+    "1-0:51.7.0","L2 Fasström	Momentant RMS-värde",
+    "1-0:71.7.0","L3 Fasström	Momentant RMS-värde"
+    }
 
 def checkcrc(p1telegram):
     # check CRC16 checksum of telegram and return False if not matching
