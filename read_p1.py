@@ -14,12 +14,14 @@ from tabulate import tabulate
 import mysql.connector
 import sqlite3
 from datetime import datetime
+from datetime import timezone
+import time
 
 # Change your serial port here:
 serialport = '/dev/ttyUSB0'
 
 # Enable debug if needed:
-debug = False
+debug = True
 
 # MySQL Host
 host = "127.0.0.1"
@@ -56,7 +58,7 @@ curs = None
 #     }
 
 obiscodes = {
-    "0-0.1.0.0":"Datum och tid",
+    "0-0:1.0.0":"Datum och tid",
     "1-0:1.8.0":"Mätarställning Aktiv Energi Uttag",
     "1-0:2.8.0":"Mätarställning Aktiv Energi Inmatning",
     "1-0:3.8.0":"Mätarställning Reaktiv Energi Uttag",
@@ -146,8 +148,7 @@ def parsetelegramline(p1line):
         return ()
 
 # Upload data to server
-def uploadData(backlogData=False):
-    global c, upload, duration
+def uploadData(timeStamp,rate):
     try:
         mydb = mysql.connector.connect(
             host=host,
@@ -155,39 +156,14 @@ def uploadData(backlogData=False):
             password="UKJkXjpBmgjeYhRZ",
             database="Energy")
         mycursor = mydb.cursor()
-        if backlogData == False:
-            sql = "INSERT INTO Log (Rate, Duration) VALUES (%s,%s)" % (str(c), duration)
-        else:
-            sql = "INSERT INTO Log (Logtime, Rate, Duration) VALUES %s"
-            try:
-                result = curs.execute("SELECT * FROM Log")
-                data = []
-                rows = 1
-                for row in result:
-                    data.append('("%s",%s)' % (row[0], row[1]))
-                    rows = rows + 1
-                val = ','.join(data)
-                val = val + ',(CURRENT_TIMESTAMP, %s, %s)' % (str(c),duration)
-                sql = sql % val
-            except (sqlite3.Error, sqlite3.Warning) as e:
-                print(" - Error %s [%s]" % (e, str(datetime.now())), flush=True)
-                return False
+        
+        sql = "INSERT INTO Log (Logtime, Rate) VALUES (%s,%s)" % (timeStamp, rate)
         mycursor.execute(sql)
         mydb.commit()
 
-        if backlogData == False:
-            if debug:
-                print(" + %s pulses uploaded." % str(c), flush=True)
-        else:
-            try:
-                curs.execute("DELETE FROM Log")
-                conn.commit()
-                if debug:
-                    print(" + %s records uploaded." % str(rows), flush=True)
-            except (sqlite3.Error, sqlite3.Warning) as e:
-                print(" - Error %s [%s]" % (e, str(datetime.now())), flush=True)
-        c = 0
-        duration = 0
+        if debug:
+            print("pulses uploaded.", flush=True)
+
     except mysql.connector.Error as e:
         print(" - Error %s [%s]" % (e, str(datetime.now())), flush=True)
         print (" - Server Offline [%s]" % str(datetime.now()), flush=True)
@@ -200,6 +176,9 @@ def main():
         try:
             # read input from serial port
             p1line = ser.readline()
+            timeStamp = None
+            rate = None
+
             if debug:
                 print ("Reading: ", p1line.strip())
             # P1 telegram starts with /
@@ -224,12 +203,23 @@ def main():
                     for line in p1telegram.split(b'\r\n'):
                         r = parsetelegramline(line.decode('ascii'))
                         if r:
+                            if r[0] == "Datum och tid":
+                                timeStamp = r[1]
+                            if r[0] == "Aktiv Effekt Uttag	Momentan trefaseffekt":
+                                rate = r[1]    
+                            if timeStamp != None and rate != None:
+                                print("upload")
+                                convertedTime = time.strptime(str(int(timeStamp)), '%Y%m%d%H%M%S')
+                                timestamp = convertedTime.replace(tzinfo=timezone.utc).timestamp()
+                                uploadData(timeStamp=timeStamp, rate=rate)
+                                rate = None
+                                timeStamp = None
                             output.append(r)
                             if debug:
                                 print(f"desc:{r[0]}, val:{r[1]}, u:{r[2]}")
                     print(tabulate(output,
-                                   headers=['Description', 'Value', 'Unit'],
-                                   tablefmt='github'))
+                        headers=['Description', 'Value', 'Unit'],
+                        tablefmt='github'))
         except KeyboardInterrupt:
             print("Stopping...")
             ser.close()
