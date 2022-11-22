@@ -21,7 +21,7 @@ import time
 serialport = '/dev/ttyUSB0'
 
 # Enable debug if needed:
-debug = True
+debug = False
 
 # MySQL Host
 host = "127.0.0.1"
@@ -97,25 +97,23 @@ def checkcrc(p1telegram):
     # calculate checksum of the contents
     calccrc = hex(crcmod.predefined.mkPredefinedCrcFun('crc16')(p1contents))
     # check if given and calculated match
-    if debug:
-        print(f"Given checksum: {givencrc}, Calculated checksum: {calccrc}")
+    logDebug(f"Given checksum: {givencrc}, Calculated checksum: {calccrc}")
+    
     if givencrc != calccrc:
-        if debug:
-            print("Checksum incorrect, skipping...")
+        log(f'Checksum incorrect [Given: {givencrc}, Calculated: {calccrc}]')
         return False
     return True
 
 
-def parsetelegramline(p1line):
+def parsetelegramline(p1line,result):
     # parse a single line of the telegram and try to get relevant data from it
     unit = ""
     timestamp = ""
-    if debug:
-        print(f"Parsing:{p1line}")
+
+    logDebug(f"Parsing:{p1line}")
     # get OBIS code from line (format:OBIS(value)
     obis = p1line.split("(")[0]
-    if debug:
-        print(f"OBIS:{obis}")
+    logDebug(f"OBIS:{obis}")
     # check if OBIS code is something we know and parse it
     if obis in obiscodes:
         # get values from line.
@@ -139,16 +137,17 @@ def parsetelegramline(p1line):
             if len(lvalue) > 1:
                 unit = lvalue[1]
         # return result in tuple: description,value,unit,timestamp
-        if debug:
-            print (f"description:{obiscodes[obis]}, \
+        logDebug(f"description:{obiscodes[obis]}, \
                      value:{value}, \
                      unit:{unit}")
-        return (obiscodes[obis], value, unit)
+        result[obis] = value
+        return result
+        # return (obiscodes[obis], value, unit)
     else:
-        return ()
+        return result
 
 # Upload data to server
-def uploadData(timeStamp,rate):
+def uploadData(total,l1,l2,l3):
     try:
         mydb = mysql.connector.connect(
             host=host,
@@ -157,84 +156,87 @@ def uploadData(timeStamp,rate):
             database="Energy")
         mycursor = mydb.cursor()
         
-        sql = "INSERT INTO Log (Logtime, Rate) VALUES (%s,%s)" % (timeStamp, rate)
+        # CREATE TABLE HANLog(Logtime timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP, Total decimal(6,4) NOT NULL,L1 decimal(6,4) NOT NULL,L2 decimal(6,4) NOT NULL,L3 decimal(6,4) NOT NULL)
+
+        sql = "INSERT INTO HANLog (Total,L1,L2,L3) VALUES (%s,%s,%s,%s)" % (total,l1,l2,l3)
         mycursor.execute(sql)
         mydb.commit()
 
-        if debug:
-            print("pulses uploaded.", flush=True)
+        logDebug("pulses uploaded.")
 
     except mysql.connector.Error as e:
-        print(" - Error %s [%s]" % (e, str(datetime.now())), flush=True)
-        print (" - Server Offline [%s]" % str(datetime.now()), flush=True)
+        log(" - Error %s [%s]" % (e, str(datetime.now())))
+        log(" - Server Offline [%s]" % str(datetime.now()))
 
+
+def log(data):
+    print(data, flush=True)
+
+def logDebug(data):
+    if debug:
+        print(data, flush=True)    
 
 def main():
+    log (f'Starting [Time: {datetime.now()}]')
     ser = serial.Serial(serialport, 115200, xonxoff=1)
     p1telegram = bytearray()
+    log (f'Reading serial data [Port: {serialport}]')
     while True:
         try:
             # read input from serial port
             p1line = ser.readline()
-            timeStamp = None
-            rate = None
 
-            if debug:
-                print ("Reading: ", p1line.strip())
+            logDebug(f'Reading: {p1line.strip()}')
             # P1 telegram starts with /
             # We need to create a new empty telegram
             if "/" in p1line.decode('ascii'):
-                if debug:
-                    print ("Found beginning of P1 telegram")
+                logDebug("Found beginning of P1 telegram")
                 p1telegram = bytearray()
-                print('*' * 60 + "\n")
             # add line to complete telegram
             p1telegram.extend(p1line)
             # P1 telegram ends with ! + CRC16 checksum
             if "!" in p1line.decode('ascii'):
-                if debug:
-                    print("Found end, printing full telegram")
-                    print('*' * 40)
-                    print(p1telegram.decode('ascii').strip())
-                    print('*' * 40)
+                logDebug("Found end, printing full telegram")
+                logDebug('*' * 40)
+                logDebug(p1telegram.decode('ascii').strip())
+                logDebug('*' * 40)
                 if checkcrc(p1telegram):
                     # parse telegram contents, line by line
-                    output = []
+
+                    result = {}
+                    # output = []
                     for line in p1telegram.split(b'\r\n'):
-                        r = parsetelegramline(line.decode('ascii'))
-                        if r:
-                            if r[0] == "Datum och tid":
-                                timeStamp = r[1]
-                            if r[0] == "Aktiv Effekt Uttag	Momentan trefaseffekt":
-                                rate = r[1]    
-                            if timeStamp != None and rate != None:
-                                print("upload")
-                                convertedTime = time.strptime(str(int(timeStamp)), '%Y%m%d%H%M%S')
-                                timestamp = convertedTime.replace(tzinfo=timezone.utc).timestamp()
-                                uploadData(timeStamp=timeStamp, rate=rate)
-                                rate = None
-                                timeStamp = None
-                            output.append(r)
-                            if debug:
-                                print(f"desc:{r[0]}, val:{r[1]}, u:{r[2]}")
-                    print(tabulate(output,
-                        headers=['Description', 'Value', 'Unit'],
-                        tablefmt='github'))
+                        result = parsetelegramline(line.decode('ascii'),result)
+
+                    # Upload result
+                    total = result["1-0:1.7.0"]
+                    l1 = result["1-0:21.7.0"]
+                    l2 = result["1-0:42.7.0"]
+                    l3 = result["1-0:61.7.0"]
+                    
+                    uploadData(total,l1,l2,l3)
+                        
         except KeyboardInterrupt:
-            print("Stopping...")
+            log("Stopping...")
             ser.close()
             break
-        except:
+        
+        except Exception as e:
             # if debug:
-            #     print(traceback.format_exc())
-            # print(traceback.format_exc())
-            print ("Something went wrong...")
+            #     log(traceback.format_exc())
+            # log(traceback.format_exc())
+            log(f'Something went wrong [Exception: {e}]')
             
+            log(f'Closing port')
             # flush the buffer
             ser.flush()
-            
             ser.close()
+
+            #Open new
+            log (f'Reading serial data [Port: {serialport}]')
+            ser = serial.Serial(serialport, 115200, xonxoff=1)
 
 
 if __name__ == '__main__':
     main()
+    log (f'Stopping [Time: {datetime.now()}]')
